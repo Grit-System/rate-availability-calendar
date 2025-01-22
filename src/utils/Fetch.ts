@@ -8,6 +8,7 @@ interface Props {
 }
 
 export interface IResult<T> {
+  nextCursor?: number;
   data: T;
   message: string;
   status: string;

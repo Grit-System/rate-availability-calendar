@@ -80,17 +80,19 @@ export default function Page() {
   // Handle horizontal scroll for the entire calendar
   const handleCalenderScroll = useCallback(
     ({ scrollLeft }: GridOnScrollProps) => {
-      InventoryRefs.current.forEach((ref) => {
-        if (ref.current) {
-          ref.current.scrollTo({ scrollLeft });
+      requestAnimationFrame(() => {
+        InventoryRefs.current.forEach((ref) => {
+          if (ref.current) {
+            ref.current.scrollTo({ scrollLeft });
+          }
+        });
+        if (calenderMonthsRef.current) {
+          calenderMonthsRef.current.scrollTo(scrollLeft);
+        }
+        if (calenderDatesRef.current) {
+          calenderDatesRef.current.scrollTo({ scrollLeft });
         }
       });
-      if (calenderMonthsRef.current) {
-        calenderMonthsRef.current.scrollTo(scrollLeft);
-      }
-      if (calenderDatesRef.current) {
-        calenderDatesRef.current.scrollTo({ scrollLeft });
-      }
     },
     []
   );
@@ -100,33 +102,34 @@ export default function Page() {
     const { current: rootContainer } = rootContainerRef;
     if (rootContainer) {
       const handler = (e: WheelEvent) => {
-        if (
-          mainGridContainerRef.current &&
-          InventoryRefs.current &&
-          calenderMonthsRef.current &&
-          calenderDatesRef.current
-        ) {
-          // Check if deltaX is non-zero (indicating horizontal scroll)
-          if (e.deltaX !== 0) {
-            e.preventDefault();
-            let { scrollLeft } = mainGridContainerRef.current;
-            scrollLeft += e.deltaX;
-
-            InventoryRefs.current.forEach((ref) => {
-              if (ref.current) {
-                ref.current.scrollTo({ scrollLeft });
-              }
-            });
-
-            calenderMonthsRef.current.scrollTo(scrollLeft);
-            calenderDatesRef.current.scrollTo({ scrollLeft });
-          }
+        if (e.deltaX !== 0) {
+          e.preventDefault();
+          requestAnimationFrame(() => {
+            if (
+              mainGridContainerRef.current &&
+              InventoryRefs.current &&
+              calenderMonthsRef.current &&
+              calenderDatesRef.current
+            ) {
+              const scrollLeft =
+                mainGridContainerRef.current.scrollLeft + e.deltaX;
+              handleCalenderScroll({
+                scrollLeft,
+                scrollTop: 0,
+                horizontalScrollDirection:
+                  e.deltaX > 0 ? "forward" : "backward",
+                verticalScrollDirection: "forward",
+                scrollUpdateWasRequested: false,
+              });
+            }
+          });
         }
       };
-      rootContainer.addEventListener("wheel", handler);
+
+      rootContainer.addEventListener("wheel", handler, { passive: false });
       return () => rootContainer.removeEventListener("wheel", handler);
     }
-  });
+  }, [handleCalenderScroll]);
 
   // State for calendar dates and months
   const [calenderDates, setCalenderDates] = useState<Array<dayjs.Dayjs>>([]);
@@ -142,6 +145,22 @@ export default function Page() {
   });
   const watchedDateRange = watch("date_range");
 
+  // Fetch room rate availability calendar data
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isSuccess,
+  } = useRoomRateAvailabilityCalendar({
+    property_id: propertyId,
+    start_date: watchedDateRange[0]!.format("YYYY-MM-DD"),
+    end_date: (watchedDateRange[1]
+      ? watchedDateRange[1]
+      : watchedDateRange[0]!.add(2, "month")
+    ).format("YYYY-MM-DD"),
+  });
+
   // Update calendar dates and months when the date range changes
   useEffect(() => {
     const { months, dates } = countDaysByMonth(
@@ -155,15 +174,25 @@ export default function Page() {
     setCalenderDates(dates);
   }, [watchedDateRange]);
 
-  // Fetch room rate availability calendar data
-  const room_calendar = useRoomRateAvailabilityCalendar({
-    property_id: propertyId,
-    start_date: watchedDateRange[0]!.format("YYYY-MM-DD"),
-    end_date: (watchedDateRange[1]
-      ? watchedDateRange[1]
-      : watchedDateRange[0]!.add(2, "month")
-    ).format("YYYY-MM-DD"),
-  });
+  // Intersection observer to detect when to load more data
+  const observerTarget = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   // Component to render each month row in the calendar
   const MonthRow: React.FC<ListChildComponentProps> = memo(function MonthRowFC({
@@ -348,6 +377,7 @@ export default function Page() {
                     ref={calenderDatesRef}
                     outerRef={mainGridContainerRef}
                     onScroll={handleDatesScroll}
+                    overscanColumnCount={5}
                   >
                     {DateRow}
                   </FixedSizeGrid>
@@ -356,34 +386,25 @@ export default function Page() {
             </Grid>
           </Grid>
 
-          {room_calendar.isSuccess
-            ? room_calendar.data.data.room_categories.map(
-                (room_category, key) => (
-                  <RoomRateAvailabilityCalendar
-                    key={key}
-                    index={key}
-                    InventoryRefs={InventoryRefs}
-                    isLastElement={
-                      key === room_calendar.data.data.room_categories.length - 1
-                    }
-                    room_category={room_category}
-                    handleCalenderScroll={handleCalenderScroll}
-                  />
-                )
-              )
-            : null}
-          {room_calendar.isLoading && (
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                height: "100%",
-              }}
-            >
+          {isSuccess &&
+            data?.pages?.map((page) =>
+              page?.data?.room_categories?.map((room_category, key) => (
+                <RoomRateAvailabilityCalendar
+                  key={`${room_category.id}-${key}`}
+                  index={key}
+                  InventoryRefs={InventoryRefs}
+                  isLastElement={key === page.data.room_categories.length - 1}
+                  room_category={room_category}
+                  handleCalenderScroll={handleCalenderScroll}
+                />
+              ))
+            )}
+          {isFetchingNextPage && (
+            <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
               <CircularProgress />
             </Box>
           )}
+          <div ref={observerTarget} style={{ height: "20px" }} />
         </Card>
       </Box>
       <Box
