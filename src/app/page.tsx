@@ -165,6 +165,29 @@ export default function Page() {
     ).format("YYYY-MM-DD"),
   });
 
+  // Handle infinite scroll for vertical data loading
+  const handleInfiniteScroll = useCallback(() => {
+    if (
+      rootContainerRef.current &&
+      rootContainerRef.current.scrollHeight -
+        rootContainerRef.current.scrollTop <=
+        rootContainerRef.current.clientHeight + 100
+    ) {
+      if (room_calendar.hasNextPage && !room_calendar.isFetchingNextPage) {
+        room_calendar.fetchNextPage();
+      }
+    }
+  }, [room_calendar]);
+
+  useEffect(() => {
+    const { current: container } = rootContainerRef;
+    if (container) {
+      container.addEventListener("scroll", handleInfiniteScroll);
+      return () =>
+        container.removeEventListener("scroll", handleInfiniteScroll);
+    }
+  }, [handleInfiniteScroll]);
+
   // Component to render each month row in the calendar
   const MonthRow: React.FC<ListChildComponentProps> = memo(function MonthRowFC({
     index,
@@ -272,7 +295,16 @@ export default function Page() {
             </Grid>
           </Grid>
         </Card>
-        <Card elevation={1} sx={{ my: 6, padding: 3 }} ref={rootContainerRef}>
+        <Card
+          elevation={1}
+          ref={rootContainerRef}
+          sx={{
+            my: 6,
+            padding: 3,
+            overflow: "auto",
+            height: "calc(100vh - 414px)",
+          }}
+        >
           <Grid container columnSpacing={2}>
             <Grid
               size={{
@@ -357,31 +389,38 @@ export default function Page() {
           </Grid>
 
           {room_calendar.isSuccess
-            ? room_calendar.data.data.room_categories.map(
-                (room_category, key) => (
-                  <RoomRateAvailabilityCalendar
-                    key={key}
-                    index={key}
-                    InventoryRefs={InventoryRefs}
-                    isLastElement={
-                      key === room_calendar.data.data.room_categories.length - 1
-                    }
-                    room_category={room_category}
-                    handleCalenderScroll={handleCalenderScroll}
-                  />
-                )
-              )
+            ? room_calendar.data.pages.map((page, index) => (
+                <Box key={index}>
+                  {page.data.room_categories.map((room_category, key) => (
+                    <RoomRateAvailabilityCalendar
+                      key={key}
+                      index={key}
+                      InventoryRefs={InventoryRefs}
+                      isLastElement={
+                        key === page.data.room_categories.length - 1
+                      }
+                      room_category={room_category}
+                      handleCalenderScroll={handleCalenderScroll}
+                    />
+                  ))}
+                </Box>
+              ))
             : null}
-          {room_calendar.isLoading && (
+
+          {/* Infinite Scroll Trigger */}
+          {room_calendar.hasNextPage && (
             <Box
               sx={{
+                py: 4,
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
-                height: "100%",
+                flexDirection: "column",
+                gap: 2,
               }}
             >
               <CircularProgress />
+              <Typography color="gray">Loading more...</Typography>
             </Box>
           )}
         </Card>
