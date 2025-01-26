@@ -1,4 +1,3 @@
-// Import necessary modules and components
 import { Box, Grid2 as Grid, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import RoomInventoryStatusCell from "./StatusCell";
@@ -22,7 +21,7 @@ import { Person } from "@mui/icons-material";
 
 // Define the props for the RoomRateAvailabilityCalendar component
 interface IProps {
-  InventoryRefs: RefObject<Array<RefObject<VariableSizeGrid | null>>>;
+  InventoryRefs: Array<RefObject<VariableSizeGrid>>;
   handleCalenderScroll: ({ scrollLeft }: GridOnScrollProps) => void;
   index: number;
   isLastElement: boolean;
@@ -43,10 +42,10 @@ interface IGridData {
 // Component to render the room rate availability calendar
 export default function RoomRateAvailabilityCalendar(props: IProps) {
   const theme = useTheme(); // Get the theme for styling
-  const InventoryRef = useRef<VariableSizeGrid | null>(null);
+  const InventoryRef = useRef<VariableSizeGrid>(null!);
 
   // Store the ref in the InventoryRefs array
-  props.InventoryRefs.current[props.index] = InventoryRef;
+  props.InventoryRefs[props.index] = InventoryRef;
 
   // Memoize the grid data to avoid unnecessary re-renders
   const calendarGridData = useMemo(() => {

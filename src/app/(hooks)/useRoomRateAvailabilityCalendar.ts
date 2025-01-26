@@ -51,7 +51,7 @@ interface IParams {
 
 interface IResponse {
   room_categories: Array<IRoomCategoryCalender>;
-  nextCursor?: number; // available if you pass a cursor as query param
+  nextCursor?: number;
 }
 
 // Custom hook to fetch room rate availability calendar data
@@ -63,12 +63,12 @@ export default function useRoomRateAvailabilityCalendar(params: IParams) {
 
   // Use React Query's useQuery hook to fetch data
   return useInfiniteQuery({
-    queryKey: ["property_room_calendar", params], // Unique query key
+    queryKey: ["property_room_calendar", params],
     queryFn: async ({ pageParam = 0 }) => {
       url.search = new URLSearchParams({
         start_date: params.start_date,
         end_date: params.end_date,
-        cursor: String(pageParam), // for infinite scroll
+        cursor: String(pageParam),
       }).toString();
 
       return await Fetch<IResponse>({
