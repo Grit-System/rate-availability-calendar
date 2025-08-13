@@ -20,7 +20,7 @@ The candidate is required to:
 
 ### Base URL
 
-`https://beta.api.bytebeds.com`
+`https://pms.beta.api.bytebeds.com`
 
 ### Endpoint
 
